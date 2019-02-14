@@ -7,9 +7,10 @@ module TypeTrees
 
 struct Binding
     mod::Module
-    sym::Symbol
+    sym::String
 end
-Binding(tn::TypeName) = Binding(tn.module, tn.name)
+Binding(tn::Core.TypeName) = Binding(tn.module, tn.name)
+Binding(mod::Module, sym::Symbol) = Binding(mod, String(sym))
 Base.isless(a::Binding, b::Binding) = isless(a.sym, b.sym)
 
 # The node type holds the type of the current node and a dict of subtypes
@@ -95,19 +96,19 @@ type_props(typ::DataType) = string("<<",
                                      Base.datatype_haspadding(typ) ? " haspadding" : "",
                                      " nfields:", Core.nfields(typ),
                                      " size:", typ.size,
-                                     ", align:", Base.datatype_alignment(typ)) : "",
+                                     " align:", Base.datatype_alignment(typ)) : "",
                                  " >>")
 
 function print_tree(subtypes::Dict{Binding, TTNode}, pfx::String="")
     for b in sort!(collect(keys(subtypes)))
         v = subtypes[b]
-        ishidden = unsafe_load(Base.unsafe_convert(Ptr{UInt8}, b.sym)) == UInt8('#')
+        ishidden = b.sym[1] == '#'
         if ishidden && supertype(v.typ) === Function
             continue
         end
         if b.mod === Main
-            n = string(b.sym)
-        elseif !isa(v.typ, DataType) || v.typ.name.module != b.mod || v.typ.name.name != b.sym
+            n = b.sym
+        elseif !isa(v.typ, DataType) || v.typ.name.module != b.mod || string(v.typ.name.name) != b.sym
             n_io = IOBuffer()
             print(n_io, b.mod, '.', b.sym)
             ua = v.typ
@@ -138,17 +139,16 @@ function print_tree(subtypes::Dict{Binding, TTNode}, pfx::String="")
     end
 end
 
-
-# TODO: optionally take module names in command line
-# TODO: option to list subtrees of type tree, or other symbol types
 const types_tree = Dict{Binding, TTNode}()
-
-store_all_from(Main)
-
-# print_tree(types_tree)
 
 end # module
 
 if !isinteractive()
+    # TODO: optionally take module names in command line
+    # TODO: option to list subtrees of type tree, or other symbol types
+    roots = Base.loaded_modules_array()
+    for m in roots
+        TypeTrees.store_all_from(m)
+    end
     TypeTrees.print_tree(TypeTrees.types_tree)
 end
